@@ -1,6 +1,8 @@
 # Machine_Learning_R
 Comparing different machine learning models in R 
 
+
+
 # Abstract
 
 This report focuses on loading and visualizing data, and testing different types of Machine learning models in R. Their performances were analyzed and discussed. The specific subject in question was data that did not follow a normal distribution in general. And the goal was to determine which model performed best under the circumstances to categorize different biomes based on enviornmenal factors.
