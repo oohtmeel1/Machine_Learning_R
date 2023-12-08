@@ -9,7 +9,7 @@ This report focuses on loading and visualizing data, and testing different types
 The models used were: A Random Forest Classifier, Support Vector Machine(SVM), Decision Tree Classifier and Naive Bayes Classifier.
 
 
-# Backgroundd
+# Background
 The Data being used comes from the U.S. Environmental Protection Agency (EPA Henceforth). There were two files, one for 2007 and one for 2012, each file contains information about the evaporation-to-inflow ratio of and water residence time for over a thousand lakes around the United States.[1] The below table briefly describes the column names of the data that were of interest to us. The data was originally collected as part of a study ''Lake Water Levels and Associated Hydrologic Characteristics in the Conterminous U.S.''[2] ''Lake Hydrologic study variables include water-level drawdown and two water stable isotope-derived parameters: evaporation-to-inflow (E:I) and water residence time. ''[2]
 Given just the characteristics of an area, can a Machine Learning model classify the type of area.
 
