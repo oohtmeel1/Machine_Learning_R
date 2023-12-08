@@ -15,13 +15,15 @@ Given just the characteristics of an area, can a Machine Learning model classify
 
 
 *Name of Variable & Description*                          
-ECO\_BIO         - Type of Enviornment     \\          
-RT               - Retention time of water in each lake \\
-EI               - Evaporation Inflow Rate  \\            
-dD\_H2O          - Water Type used for comparison  \\     
-d18\_H2O         - Water Type used for comparison   \\    
+ECO\_BIO         - Type of Enviornment     \          
+RT               - Retention time of water in each lake \
+EI               - Evaporation Inflow Rate  \          
+dD\_H2O          - Water Type used for comparison  \   
+d18\_H2O         - Water Type used for comparison   \  
 
 # references
 
-https://catalog.data.gov/dataset/nars-hydrologic-data[1] \\
+https://catalog.data.gov/dataset/nars-hydrologic-data[1] \
+
+
 https://onlinelibrary.wiley.com/doi/10.1111/1752-1688.12817[2]
