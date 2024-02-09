@@ -1,0 +1,638 @@
+---
+title: "Machine learning project for Classification of biome type"
+author: "Agnes McFarlin"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Abstract
+
+This report focuses on loading and visualizing data, and testing different types of Machine learning models in R. Their performances were analyzed and discussed. The specific subject in question was data that did not follow a normal distribution in general. And the goal was to determine which model performed best under the circumstances to categorize different biomes based on enviornmenal factors.
+The models used were: A Random Forest Classifier, Support Vector Machine(SVM), Decision Tree Classifier and Naive Bayes Classifier.
+
+# Introduction/Background
+
+The Data being used comes from the U.S. Environmental Protection Agency (EPA Henceforth). There were two files, one for 2007 and one for 2012, each file contains information about the evaporation-to-inflow ratio of and water residence time for over a thousand lakes around the United States.[1] The below table briefly describes the column names of the data that were of interest to us. The data was originally collected as part of a study ''Lake Water Levels and Associated Hydrologic Characteristics in the Conterminous U.S.''[2] ''Lake Hydrologic study variables include water-level drawdown and two water stable isotope-derived parameters: evaporation-to-inflow (E:I) and water residence time. ''[2]
+Given just the characteristics of an area, can a Machine Learning model classify the type of area.
+
+
+*Name of Variable & Description*                          
+ECO\_BIO         - Type of Enviornment     \          
+RT               - Retention time of water in each lake \
+EI               - Evaporation Inflow Rate  \            
+dD\_H2O          - Water Type used for comparison  \     
+d18\_H2O         - Water Type used for comparison   \   
+
+# references
+
+https://catalog.data.gov/dataset/nars-hydrologic-data[1] \
+
+https://onlinelibrary.wiley.com/doi/10.1111/1752-1688.12817[2]
+
+
+# Data Loading and initial set up
+
+Data is loaded in and some basic cleaning is shown here. 
+Mostly getting rid of null and NA values or empty rows.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message =FALSE}
+
+
+library(dplyr)
+library(caret)
+library(rpart.plot)
+library(ggplot2)
+library(caTools)
+library(e1071)
+library(randomForest) 
+library(caTools) 
+library(randomForest)
+
+nla2012_isotopes_wide <- read.csv("C:/Users/amcfa/gitfiles/Projects/RStudio/Project_water_table_Isotopes/nla2012_isotopes_wide.csv")
+nla2007_isotopes_wide <- read.csv("C:/Users/amcfa/gitfiles/Projects/RStudio/Project_water_table_Isotopes/nla2007_isotopes_wide.csv")
+
+abc <-nla2012_isotopes_wide
+defg <- nla2007_isotopes_wide
+
+
+
+length(which(is.na(abc)))
+
+length(which(is.na(defg)))
+
+abc <- na.omit(abc)
+defg <- na.omit(defg)
+
+```
+
+
+The different biomes were turned into factors. The most common biomes were used for this study, which were the plains, Western Mountains and Eastern Highlands.
+To provide more data for the models to work with, the two dataframes were combined and randomly sampled from to create training and test sets.
+
+
+```{r message =FALSE}
+
+abc$ECO_BIO <- factor(abc$ECO_BIO)
+defg$ECO_BIO <- factor(defg$ECO_BIO)
+abc1 <-select(abc, c('ECO_BIO','RT','E_I','dD_H2O','d18O_H2O'))
+defg1 <-select(defg, c('ECO_BIO','RT','E_I','dD_H2O','d18O_H2O'))
+
+
+
+set.seed(42)
+
+trying_shorter<-bind_rows(abc1, defg1)
+
+smp_size <- floor(0.85 * nrow(trying_shorter))
+
+train_ind <- sample(seq_len(nrow(trying_shorter)), size = smp_size)
+
+abc1 <- trying_shorter[train_ind, ]
+defg1 <- trying_shorter[-train_ind, ]
+
+
+target <- c("PLAINS","WMTNS",'EHIGH')
+abc1<-filter(abc1,ECO_BIO %in% target)
+defg1<-filter(defg1,ECO_BIO %in% target)
+abc1$ECO_BIO <- factor(abc1$ECO_BIO)
+defg1$ECO_BIO <- factor(defg1$ECO_BIO)
+
+ggplot(abc1,aes(ECO_BIO))+
+     geom_bar() +
+     ggtitle("overview of Data Distribution 2012")
+
+
+ggplot(defg1,aes(ECO_BIO))+
+     geom_bar() +
+     ggtitle("overview of Data Distribution 2007")
+
+
+```
+
+
+# A first model
+A model was run without performing any outlier removal or scaling. 
+The accuracy was fair, at 68.7%. The decision was made to scale the data and remove outliers to improve model metrics.
+
+
+
+```{r}
+
+set.seed(50)
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid")
+    
+    
+rf_default <- train(ECO_BIO~.,
+    data = abc1,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+    
+    
+    
+print(rf_default)
+prediction <-predict(rf_default, defg1)
+confusionMatrix(prediction, defg1$ECO_BIO)
+
+```
+
+
+
+
+# Visualizations,outlier detection and scaling
+
+Basic EDA was performed using bar graphs, and box plots (above). The purpose of the box plots was for outlier detection. And there were no factors that were outlier free. 
+In order to remove outliers the ``` IQR ``` method was used. (Interquartile range method)\
+Where a 'fence'  was set up outside of Q1 and Q3. Anything outside of this fence was considered an outlier.\
+The formula for calculating the 'fence' : \
+$((1.5 * IQR) - Q1)$ \
+OR \
+$((1.5 * IQR) + Q3)$
+
+* $IQR$ is the interquartile range. Which is obtained by subtracting Q1-Q3.
+
+
+The data was also scaled which takes a value, subtracts it from the overall mean and divides by the standard deviation.
+
+$\frac{X-\bar(X)}{sd}$
+
+```{r code, echo=FALSE,results='hide'}
+par(mfrow=c(2,2))
+b<-boxplot(dD_H2O ~ ECO_BIO, data=abc1, main="Data for 2012 for dD_H2O")
+
+b
+
+b<-boxplot(dD_H2O ~ ECO_BIO, data=defg1,main="Data for 2007 for dD_H2O")
+
+
+b
+
+
+
+b<-boxplot(E_I ~ ECO_BIO, data=abc1, main="Data for 2012 for E_I")
+
+b
+
+b<-boxplot(E_I ~ ECO_BIO, data=defg1,main="Data for 2007 for E_I")
+
+
+b
+
+
+b<-boxplot(d18O_H2O ~ ECO_BIO, data=abc1, main="Data for 2012 for d18O_H2O")
+
+b
+
+b<-boxplot(d18O_H2O ~ ECO_BIO, data=defg1,main="Data for 2007 for d18O_H2O")
+
+
+b
+
+
+b<-boxplot(RT ~ ECO_BIO, data=abc1, main="Data for 2012 for RT")
+
+b
+
+b<-boxplot(RT ~ ECO_BIO, data=defg1,main="Data for 2007 for RT")
+
+
+b
+
+
+
+```
+
+```{r, echo=FALSE}
+
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+     qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+    H <- 1.5 * IQR(x, na.rm = na.rm)
+    !(x < (qnt[1] - H) | x > (qnt[2] + H))
+}
+
+
+```
+
+# After Cleaning 
+```{r, echo=FALSE,results='hide'}
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(dD_H2O)) %>%
+     ungroup
+
+par(mfrow=c(2,2))
+
+b<-boxplot(dD_H2O ~ ECO_BIO, data=abc1, main="Data for 2012 for dD_H2O")
+
+b
+
+
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(d18O_H2O)) %>%
+     ungroup
+
+b<-boxplot(d18O_H2O ~ ECO_BIO, data=abc1, main="Data for 2012 for d18O_H2O")
+
+b
+
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+b<-boxplot(RT ~ ECO_BIO, data=abc1, main="Data for 2012 for RT")
+
+b
+
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(E_I)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(E_I)) %>%
+     ungroup
+
+abc1<-abc1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(E_I)) %>%
+     ungroup
+
+b<-boxplot(E_I ~ ECO_BIO, data=abc1, main="Data for 2012 for E_I")
+
+b
+
+
+
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(dD_H2O)) %>%
+     ungroup
+
+
+b<-boxplot(dD_H2O ~ ECO_BIO, data=defg1,main="Data for 2007 for dD_H2O")
+
+
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(d18O_H2O)) %>%
+     ungroup
+b<-boxplot(d18O_H2O ~ ECO_BIO, data=defg1,main="Data for 2007 for d18O_H2O")
+
+
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(RT)) %>%
+     ungroup
+
+b<-boxplot(RT ~ ECO_BIO, data=defg1,main="Data for 2007 for RT")
+
+
+
+defg1<-defg1 %>%
+     group_by(ECO_BIO) %>%
+     filter(remove_outliers(E_I)) %>%
+     ungroup
+
+b<-boxplot(E_I ~ ECO_BIO, data=defg1,main="Data for 2007 for E_I")
+
+
+abc1[-1] = scale(abc1[-1]) 
+defg1[-1] = scale(defg1[-1]) 
+
+
+hist(abc1$RT, main = 'Histogram of RT for 2012')
+hist(abc1$dD_H2O, main = 'Histogram of Water Change 2012')
+hist(abc1$d18O_H2O, main = 'Histogram of Water Change 2012')
+hist(abc1$E_I, main = 'Histogram of E_I 2012')
+hist(defg1$RT, main = 'Histogram of RT for 2007')
+hist(defg1$dD_H2O, main = 'Histogram of Water Change 2007')
+hist(defg1$d18O_H2O, main = 'Histogram of Water Change  2007')
+hist(defg1$E_I, main = 'Histogram of E_I 2007')
+
+
+
+
+```
+
+# A random Forest Classifier. 
+None of the data follows a traditional normal distribution. 
+Random forest classifiers are said to do well with data that fit into that category.
+They can be used for classification and regression. Are resistant to overfitting and can handle data with many features.
+
+After outlier removal and scaling the same model performs 8% better than the original with a 73.8% accuracy score.
+
+
+```{r}
+
+set.seed(50)
+trControl <- trainControl(method = "cv",
+    number = 5,
+    search = "grid")
+    
+    
+rf_default <- train(ECO_BIO~.,
+    data = abc1,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+    
+    
+    
+print(rf_default)
+prediction <-predict(rf_default, defg1)
+confusionMatrix(prediction, defg1$ECO_BIO)
+
+
+
+```
+
+
+```{r} 
+
+
+set.seed(72)
+trControl <- trainControl(method = "cv",
+    number = 10,
+    search = "grid")
+    
+    
+rf_default <- train(ECO_BIO~.,
+    data = abc1,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+    
+    
+    
+print(rf_default)
+prediction <-predict(rf_default, defg1)
+confusionMatrix(prediction, defg1$ECO_BIO)
+
+
+
+```
+
+
+# Tuning the tree
+
+
+```{r,echo=TRUE,message=FALSE,warning=FALSE,results='hide'}
+
+set.seed(1234)
+tuneGrid <- expand.grid(.mtry = c(1: 5))
+rf_try <- train(ECO_BIO~.,
+    data = abc1,
+    method = "rf",
+    metric = "Accuracy",
+    tuneGrid = tuneGrid,
+    trControl = trControl,
+    importance = TRUE,
+    nodesize = 14,
+    ntree = 300)
+    
+print(rf_try)
+
+
+max(rf_try$results$Accuracy)
+
+best_mtry <- rf_try$bestTune$mtry 
+best_mtry
+
+```
+```{r,echo=FALSE,message=FALSE,warning=FALSE,results='hide'}
+max_node <- list()
+tuneGrid <- expand.grid(.mtry = best_mtry)
+for (maxnodes in c(5: 40)) {
+    rf_maxnode <- train(ECO_BIO~.,
+        data = abc1,
+        method = "rf",
+        metric = "Accuracy",
+        tuneGrid = tuneGrid,
+        trControl = trControl,
+        importance = TRUE,
+        nodesize = 14,
+        maxnodes = maxnodes,
+        ntree = 300)
+    current_iteration <- toString(maxnodes)
+    max_node[[current_iteration]] <- rf_maxnode
+}
+results_mtry <- resamples(max_node)
+summary(results_mtry)
+
+
+best_trees <- list()
+for (ntree in c(10,20,30,40,50,60,70,80,90,100,150,200,250, 300, 350, 400, 450, 500, 550, 600, 800, 1000, 2000)) {
+    rf_maxtrees <- train(ECO_BIO~.,
+        data = abc1,
+        method = "rf",
+        metric = "Accuracy",
+        tuneGrid = tuneGrid,
+        trControl = trControl,
+        importance = TRUE,
+        nodesize = 14,
+        maxnodes = 24,
+        ntree = ntree)
+    key <- toString(ntree)
+    best_trees[[key]] <- rf_maxtrees
+}
+results_tree <- resamples(best_trees)
+summary(results_tree)
+
+
+```
+
+```{r}
+
+set.seed(45)
+results_tree$values['60~Accuracy']
+
+
+
+best_fiit1 <- train(ECO_BIO~.,
+    abc1,
+    method = "rf",
+    metric = "Accuracy",
+    tuneGrid = tuneGrid,
+    trControl = trControl,
+    importance = TRUE,
+    nodesize = 14,
+    ntree = 60,
+    maxnodes = 40,
+    )
+
+
+
+prediction <-predict(best_fiit1, defg1)
+confusionMatrix(prediction, defg1$ECO_BIO)
+
+```
+
+# Classification tree using rpart 
+
+Decision trees are supervised learning algorithms often used for classification or regression. Data is split based on Decision nodes with the output being leaf nodes. 
+
+
+```{r}
+
+library(rpart)
+classifier <- rpart(formula = ECO_BIO~E_I+RT+dD_H2O, data = abc1,method='class')
+
+y_pred <- predict(classifier, newdata=defg1,type='class')
+
+cm = table(defg1$ECO_BIO, y_pred)
+
+accuracy_Test <- sum(diag(cm)) / sum(cm)
+accuracy_Test
+
+
+```
+
+
+# Support Vector Machines 
+A base model is below
+
+Support vector Machines are great for multidimensional data. It partitions the data into n hyperplanes and places the data points in those planes. SVMs are great for multidimensional data. 
+
+``` {r}
+
+
+svmfit = svm(ECO_BIO~., data=abc1, kernel = "linear", cost = 10, scale = FALSE)
+
+print(svmfit)
+
+y_pred = predict(svmfit, newdata = defg1[-1]) 
+cm = table(defg1$ECO_BIO, y_pred) 
+
+accuracy_Test <- sum(diag(cm)) / sum(cm)
+accuracy_Test 
+
+
+```
+
+Here is some model tuning
+
+``` {r}
+set.seed(42)
+obj <- tune(svm, ECO_BIO~., data = abc1, 
+            ranges = list(gamma = c(0.01,0.1,1), cost = c(1:10),kernel=c("linear","radial"),epsilon=c(0.001,0.002,0.0001)),
+         tunecontrol = tune.control(sampling = "fix",nrepeat =3)
+           )
+
+
+summary(obj$best.parameters)
+
+```
+
+Tuned model
+```{r}
+set.seed(42)
+svmfit = svm(ECO_BIO~., data=abc1, kernel = "radial", cost = 2, gamma=.1,epsilon = 0.001, scale = FALSE, method = 'C-classification',shrinking=TRUE)
+
+print(svmfit)
+
+y_pred = predict(svmfit, newdata = defg1[-1]) 
+cm = table(defg1$ECO_BIO, y_pred) 
+
+accuracy_Test <- sum(diag(cm)) / sum(cm)
+accuracy_Test 
+
+
+```
+# Last but not least Naive Bayes
+
+
+```{r}
+
+
+NBclassfier=naiveBayes(ECO_BIO~., data=abc1)
+print(NBclassfier)
+
+predicted.classes <- NBclassfier %>% predict(defg1)
+
+mean(predicted.classes == defg1$ECO_BIO)
+
+```
+
+
+
+
+
+
+
+
+# Results and conclusion
+
+All models performed similarly. 
+
+| Model         | Result                                  |
+|------------------|------------------------------------------------|
+| Random Forest Classifier     | 76%                |
+| Classification Tree      | 75% |
+| SVM    | 76% |
+| Naive Bayes | 74%        |
+
+
+
+There is definitely more tuning I can perform, since each tuned model performed only marginally better than a model tested against uncleaned data. For a first test run using these Algorithms against this data set, they performed well. 
